@@ -1,0 +1,870 @@
+================================================================================
+  BACKEND PRD — GROOM PREMIUM BARBERING STUDIO
+  Serverless AI-Driven Automation System | Spintex Road, Accra, Ghana
+  Version 1.0 | Classification: Builder Reference Document
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — ARCHITECTURE OVERVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.1 ARCHITECTURE PARADIGM
+───────────────────────────
+  Model: 100% Serverless (no persistent backend server)
+  Runtime: Next.js API Routes (App Router) — deployed on Vercel Edge/Node runtime
+  Data persistence: Google Docs (log) + Google Calendar (availability)
+  No database: No PostgreSQL, MySQL, MongoDB, or Supabase
+  All state lives in: Google Docs, Google Calendar, and runtime memory
+
+  Why serverless?
+  - Zero infrastructure maintenance for a single admin
+  - Cost: Pay per request (near-zero for a grooming studio volume)
+  - Deployments via Vercel CI/CD without server management
+  - Scales automatically for traffic spikes
+
+1.2 SYSTEM COMPONENTS MAP
+──────────────────────────
+  [Website Frontend] ←→ [Next.js API Routes]
+                              ↓
+              ┌───────────────┼───────────────┐
+              ↓               ↓               ↓
+       [Paystack API]  [Google APIs]    [Vapi Webhooks]
+              ↓         ↙        ↘            ↓
+       [Payment Link]  [Docs]  [Calendar]  [Jude AI]
+                          ↓               ↓
+                    [Booking Log]   [Availability]
+                          ↓
+              ┌───────────┼────────────┐
+              ↓           ↓            ↓
+      [Email (SMTP)]  [WhatsApp]  [Admin Panel]
+                    (via Twilio or
+                     WhatsApp API)
+
+1.3 REQUEST FLOW DIAGRAM
+──────────────────────────
+  1. User or Jude initiates booking
+  2. Frontend calls /api/availability → reads Google Calendar
+  3. Available slots returned → user selects
+  4. Frontend calls /api/booking/initiate → validates inputs, assigns staff
+  5. System calls /api/payment/create-link → Paystack generates link
+  6. Link emailed to user via /api/notify/email
+  7. User pays → provides transaction reference
+  8. Frontend calls /api/payment/verify → checks Paystack API
+  9. /api/payment/verify also checks Google Docs for duplicate reference
+  10. If clean: calls /api/booking/confirm
+  11. /api/booking/confirm → writes to Google Docs + creates Google Calendar event
+  12. Triggers /api/notify/staff (WhatsApp) + /api/notify/client (email/WhatsApp)
+  13. Returns confirmation to frontend
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — API ROUTE DEFINITIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All routes located at: /app/api/[route]/route.ts (Next.js App Router convention)
+
+────────────────────────────────────────────────────
+ROUTE GROUP: /api/availability
+────────────────────────────────────────────────────
+
+  GET /api/availability
+  ─────────────────────
+  Purpose: Return available booking slots for a given date
+  Auth: None (public)
+  Query params:
+    date: string (ISO 8601, e.g., "2025-06-14")
+    service?: string (service ID, for duration-based slot filtering)
+
+  Logic:
+    1. Call Google Calendar API to fetch events on given date
+    2. Build an array of booked time blocks per staff member
+    3. Load working hours from admin config (Google Doc or env config)
+    4. Generate candidate slots (every 30 min within working hours)
+    5. Apply 1-hour walk-in buffer to last hour of day (mark unavailable)
+    6. For each candidate slot, check if any staff member is free
+    7. Return available slots with assigned staff IDs
+
+  Response 200:
+    {
+      date: string,
+      slots: [
+        {
+          time: "09:00",
+          available: true,
+          staffId: "barber_kwame",
+          staffName: "Kwame"
+        }, ...
+      ],
+      fullyBooked: false,
+      nextAvailable: null | string (ISO date if fullyBooked)
+    }
+
+  Response 200 (fully booked):
+    {
+      date: string,
+      slots: [],
+      fullyBooked: true,
+      nextAvailable: "2025-06-15"
+    }
+
+────────────────────────────────────────────────────
+ROUTE GROUP: /api/booking
+────────────────────────────────────────────────────
+
+  POST /api/booking/initiate
+  ──────────────────────────
+  Purpose: Validate booking details and initiate payment step
+  Auth: None (public, rate-limited)
+  Body (JSON):
+    {
+      service: string,       // service ID
+      date: string,          // ISO 8601 date
+      time: string,          // "HH:MM"
+      staffId: string,       // assigned staff
+      clientName: string,
+      clientPhone: string,   // Ghana format
+      clientEmail: string,
+      reminderMethod: "email" | "whatsapp",
+      notes?: string
+    }
+
+  Logic:
+    1. Validate all required fields (Zod schema)
+    2. Re-verify slot availability (prevent race conditions)
+    3. Calculate deposit amount (30% of service price)
+    4. Generate a unique bookingId (UUID v4)
+    5. Store booking in temporary pending state (see Pending Booking Doc)
+    6. Return bookingId + deposit amount + confirmation to proceed
+
+  Response 200:
+    {
+      bookingId: string,
+      depositAmount: number,   // GHS, e.g., 45.00
+      fullAmount: number,
+      currency: "GHS",
+      service: string,
+      date: string,
+      time: string,
+      staffName: string
+    }
+
+  Response 409 (slot taken):
+    { error: "SLOT_UNAVAILABLE", nextSlots: [...] }
+
+  Response 422 (validation):
+    { error: "VALIDATION_ERROR", fields: { ... } }
+
+  ─────────────────────────────────────
+  POST /api/booking/confirm
+  ─────────────────────────────────────
+  Purpose: Finalize a booking after payment verification
+  Auth: Internal (called only after /api/payment/verify succeeds)
+  Body:
+    {
+      bookingId: string,
+      transactionRef: string
+    }
+
+  Logic:
+    1. Load pending booking by bookingId
+    2. Write full booking row to Google Docs log
+    3. Create Google Calendar event with:
+        - Title: "[Service] — [Client Name]"
+        - Start/End: based on service duration
+        - Description: client details, phone, payment ref
+        - Calendar: per-staff calendar
+    4. Mark pending booking as confirmed
+    5. Return booking confirmation object
+
+  ─────────────────────────────────────
+  POST /api/booking/cancel
+  ─────────────────────────────────────
+  Purpose: Cancel an existing booking
+  Body: { bookingId: string, reason?: string }
+  Auth: Admin token or client email verification
+
+  Logic:
+    1. Find booking in Google Docs
+    2. Delete Google Calendar event
+    3. Update booking row status to "Cancelled"
+    4. Notify client (email/WhatsApp) — non-refundable notice included
+    5. Log cancellation with timestamp
+
+  ─────────────────────────────────────
+  POST /api/booking/reschedule
+  ─────────────────────────────────────
+  Purpose: Move a booking to a new slot
+  Body: { bookingId: string, newDate: string, newTime: string }
+  Auth: Admin token required
+
+  Logic:
+    1. Validate new slot availability
+    2. Delete old Google Calendar event
+    3. Create new Google Calendar event
+    4. Update Google Docs row
+    5. Notify client of change
+
+  ─────────────────────────────────────
+  POST /api/booking/waitlist
+  ─────────────────────────────────────
+  Purpose: Add client to waitlist for a fully booked date
+  Body: { clientName, clientEmail, clientPhone, requestedDate, service }
+
+  Logic:
+    1. Append waitlist row to Google Docs Waitlist Sheet
+    2. Send confirmation email to client
+    3. When admin manually opens a slot: trigger /api/notify/waitlist-open
+
+────────────────────────────────────────────────────
+ROUTE GROUP: /api/payment
+────────────────────────────────────────────────────
+
+  POST /api/payment/create-link
+  ──────────────────────────────
+  Purpose: Generate a Paystack payment link for the deposit
+  Body: { bookingId: string, email: string, amount: number }
+  Auth: Internal
+
+  Logic:
+    1. Call Paystack Initialize Transaction API
+       - Endpoint: POST https://api.paystack.co/transaction/initialize
+       - Headers: Authorization: Bearer PAYSTACK_SECRET_KEY
+       - Body: { email, amount (in kobo = GHS × 100), currency: "GHS",
+                 reference: bookingId, metadata: { bookingId } }
+    2. Return payment link from Paystack response
+    3. Trigger email to client with link
+
+  Response 200:
+    {
+      paymentUrl: string,    // Paystack checkout URL
+      reference: string
+    }
+
+  ─────────────────────────────────────
+  POST /api/payment/verify
+  ─────────────────────────────────────
+  Purpose: Dual-verify a Paystack transaction reference
+  Body: { reference: string, bookingId: string }
+
+  Logic — DUAL VERIFICATION:
+    STEP A — Paystack API Check:
+      1. Call GET https://api.paystack.co/transaction/verify/{reference}
+      2. Check response.data.status === "success"
+      3. Check response.data.amount matches expected deposit (with tolerance)
+      4. Check response.data.currency === "GHS"
+
+    STEP B — Google Docs Duplicate Check:
+      1. Read all transaction references from Google Docs payment log
+      2. Check if this reference already exists
+      3. If already used → return DUPLICATE error
+
+    STEP C — Confirmation:
+      1. If both checks pass → call /api/booking/confirm internally
+      2. Append reference to Google Docs used-references list
+      3. Return confirmed booking details
+
+  Response 200 (success):
+    {
+      verified: true,
+      bookingId: string,
+      booking: { ... }
+    }
+
+  Response 400 (failed):
+    { verified: false, reason: "PAYMENT_FAILED" | "DUPLICATE_REF" | "AMOUNT_MISMATCH" }
+
+  ─────────────────────────────────────
+  GET /api/payment/status
+  ─────────────────────────────────────
+  Purpose: Check payment status for a bookingId (admin use)
+  Query: { bookingId: string }
+  Returns: { status: "paid" | "pending" | "failed", reference?: string }
+
+────────────────────────────────────────────────────
+ROUTE GROUP: /api/notify
+────────────────────────────────────────────────────
+
+  POST /api/notify/email
+  ──────────────────────
+  Purpose: Send transactional email to client
+  Provider: Resend (resend.com) — serverless email API
+  Body:
+    {
+      to: string,
+      templateId: "payment_link" | "confirmation" | "reminder" | "cancellation" | "waitlist",
+      data: { ... }   // template variables
+    }
+
+  Templates:
+    payment_link:     Subject: "Your GROOM Payment Link"
+                      Body: Payment URL + booking summary + expiry notice
+    confirmation:     Subject: "Booking Confirmed — GROOM Studio"
+                      Body: Full booking details + reminder info
+    reminder_1hr:     Subject: "Your appointment is in 1 hour"
+    reminder_30min:   Subject: "Your appointment is in 30 minutes"
+    cancellation:     Subject: "Booking Cancelled — GROOM Studio"
+    waitlist_open:    Subject: "A slot opened up — GROOM Studio"
+
+  ─────────────────────────────────────
+  POST /api/notify/whatsapp
+  ─────────────────────────────────────
+  Purpose: Send WhatsApp message to staff or client
+  Provider: Twilio WhatsApp API or WhatsApp Business Cloud API
+  Body:
+    {
+      to: string,             // WhatsApp number (international format)
+      messageType: "staff_alert" | "client_reminder" | "complaint_log",
+      data: { ... }
+    }
+
+  Staff alert message template:
+    "📅 New Booking — GROOM Studio
+     Client: {clientName}
+     Service: {service}
+     Date: {date} at {time}
+     Ref: #{bookingId}"
+
+  Client reminder template (if WhatsApp selected):
+    "Hi {name}! This is Jude from GROOM Studio.
+     Your {service} appointment is {timeframe}.
+     📍 Spintex Road, Accra.
+     See you soon! 💈"
+
+  Complaint log template (sent to admin):
+    "⚠️ Complaint Logged
+     Client: {clientName}
+     Date: {date}
+     Issue: {summary}"
+
+  ─────────────────────────────────────
+  POST /api/notify/reminders (CRON)
+  ─────────────────────────────────────
+  Purpose: Scheduled job to send appointment reminders
+  Trigger: Vercel Cron Job, runs every 30 minutes
+
+  Logic:
+    1. Query Google Calendar for events in next 1 hour and 30 minutes
+    2. For each event found:
+       - Extract client data from event description
+       - Determine reminder method (email or WhatsApp)
+       - Check if reminder already sent (Google Doc flag)
+       - If not sent: dispatch notification + mark as sent
+
+  Config (vercel.json):
+    {
+      "crons": [
+        { "path": "/api/notify/reminders", "schedule": "*/30 * * * *" }
+      ]
+    }
+
+────────────────────────────────────────────────────
+ROUTE GROUP: /api/admin
+────────────────────────────────────────────────────
+
+  All /api/admin routes require: Authorization header with admin token
+  Token: Long-lived secret set in environment variables
+  Middleware: validateAdminToken() applied to all admin routes
+
+  GET /api/admin/bookings
+  ────────────────────────
+  Returns: All bookings from Google Docs (filtered, paginated)
+  Query: { status?, date?, staffId?, page?, limit? }
+
+  GET /api/admin/payments
+  ────────────────────────
+  Returns: Payment log from Google Docs
+
+  GET /api/admin/waitlist
+  ─────────────────────────
+  Returns: Waitlist entries
+
+  GET /api/admin/complaints
+  ──────────────────────────
+  Returns: Complaint log entries
+
+  POST /api/admin/settings/pricing
+  ──────────────────────────────────
+  Purpose: Update service prices
+  Body: { serviceId: string, newPrice: number }
+  Effect: Writes to admin config in Google Docs
+
+  POST /api/admin/settings/hours
+  ────────────────────────────────
+  Purpose: Update working hours
+  Body: { day: "monday" | ... | "sunday", open: "HH:MM", close: "HH:MM", isOpen: boolean }
+  Effect: Writes to working hours config
+
+  POST /api/admin/settings/staff
+  ────────────────────────────────
+  Purpose: Add, update, or remove staff
+  Body: { action: "add" | "update" | "remove", staff: { id, name, role, specialities, calendarId } }
+
+  POST /api/admin/booking/pause
+  ───────────────────────────────
+  Purpose: Pause all new bookings (emergency toggle)
+  Body: { paused: boolean, reason?: string }
+
+────────────────────────────────────────────────────
+ROUTE GROUP: /api/jude (Vapi Webhooks)
+────────────────────────────────────────────────────
+
+  POST /api/jude/webhook
+  ──────────────────────
+  Purpose: Handle inbound events from Vapi (Jude's voice AI platform)
+  This is Jude's "tool call" endpoint — Jude calls this to take actions.
+
+  Incoming event types:
+    function_call: Jude wants to execute a function
+    end_of_call_report: Call ended, log summary
+    transcript: Full call transcript
+    status_update: Call state changes
+
+  Function calls Jude can make:
+    check_availability(date, service) → calls /api/availability internally
+    initiate_booking(payload)         → calls /api/booking/initiate
+    send_payment_link(bookingId)      → calls /api/payment/create-link
+    verify_payment(reference, bookingId) → calls /api/payment/verify
+    log_complaint(clientName, summary) → appends to complaint doc
+    get_services()                    → returns services + prices from config
+    get_faq(question)                 → returns static FAQ answer
+    add_to_waitlist(payload)          → calls /api/booking/waitlist
+
+  Response to Vapi function calls:
+    { result: <string or JSON stringified data> }
+
+  POST /api/jude/complaint
+  ──────────────────────────
+  Purpose: Direct complaint logging endpoint
+  Body: { clientName, clientPhone, summary, callId? }
+  Effect: Append to Google Docs complaint log + WhatsApp notify admin
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — DATA SCHEMAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+3.1 GOOGLE DOCS — BOOKING LOG SCHEMA
+──────────────────────────────────────
+  Document: "GROOM — Booking Log"
+  Format: Tabular rows, one booking per row
+  Columns (tab-separated or table):
+
+  bookingId       | UUID string (e.g., "bk_a1b2c3d4")
+  timestamp       | ISO 8601 datetime of booking creation
+  clientName      | Full name
+  clientPhone     | Phone number
+  clientEmail     | Email address
+  service         | Service name (e.g., "Adult Haircut")
+  serviceId       | Internal ID (e.g., "adult_haircut")
+  date            | Date of appointment (YYYY-MM-DD)
+  time            | Time of appointment (HH:MM)
+  staffId         | Internal staff ID
+  staffName       | Display name of barber
+  duration        | Duration in minutes
+  fullAmount      | Full price in GHS
+  depositAmount   | 30% deposit in GHS
+  paymentStatus   | "pending" | "paid" | "failed"
+  transactionRef  | Paystack reference string
+  paystackVerified| "yes" | "no"
+  reminderMethod  | "email" | "whatsapp"
+  reminderSent1hr | "yes" | "no"
+  reminderSent30m | "yes" | "no"
+  notes           | Client special requests
+  status          | "pending" | "confirmed" | "cancelled" | "completed"
+  cancelReason    | If cancelled, reason string
+  updatedAt       | ISO 8601 last updated timestamp
+
+3.2 GOOGLE DOCS — WAITLIST SCHEMA
+───────────────────────────────────
+  Document: "GROOM — Waitlist"
+  Columns:
+
+  waitlistId      | UUID
+  timestamp       | When added
+  clientName      | string
+  clientEmail     | string
+  clientPhone     | string
+  service         | string
+  requestedDate   | YYYY-MM-DD
+  status          | "waiting" | "notified" | "converted" | "expired"
+  notifiedAt      | ISO 8601 if notified
+
+3.3 GOOGLE DOCS — COMPLAINTS SCHEMA
+──────────────────────────────────────
+  Document: "GROOM — Complaints"
+  Columns:
+
+  complaintId     | UUID
+  timestamp       | ISO 8601
+  clientName      | string
+  clientPhone     | string
+  bookingId       | Related booking (optional)
+  summary         | Complaint description
+  callId          | Vapi call ID if via Jude
+  status          | "open" | "acknowledged" | "resolved"
+  adminNotes      | Admin response
+
+3.4 GOOGLE DOCS — PAYMENT REFERENCES LOG
+──────────────────────────────────────────
+  Document: "GROOM — Used Payment References"
+  Purpose: Prevent duplicate transaction reference fraud
+  Format: One reference per line (or column)
+
+  Columns:
+  transactionRef  | string (Paystack reference)
+  bookingId       | string
+  verifiedAt      | ISO 8601
+
+3.5 GOOGLE DOCS — ADMIN CONFIG
+─────────────────────────────────
+  Document: "GROOM — Admin Config"
+  Format: Key-value pairs (JSON block or structured rows)
+
+  services: [
+    {
+      id: string,
+      name: string,
+      price: number (GHS),
+      duration: number (minutes),
+      active: boolean,
+      comingSoon: boolean
+    }
+  ]
+
+  workingHours: {
+    monday:    { open: "09:00", close: "18:00", isOpen: true },
+    tuesday:   { ... },
+    ...
+    sunday:    { isOpen: false }
+  }
+
+  staff: [
+    {
+      id: string,
+      name: string,
+      role: string,
+      specialities: string[],
+      calendarId: string,        // Google Calendar ID for this staff
+      whatsappNumber: string
+    }
+  ]
+
+  systemConfig: {
+    bookingsPaused: false,
+    walkInBufferMinutes: 60,
+    depositPercent: 30,
+    adminWhatsApp: "+233XXXXXXXXX",
+    staffWhatsApp: "+233XXXXXXXXX"
+  }
+
+3.6 GOOGLE CALENDAR EVENT SCHEMA
+──────────────────────────────────
+  Calendar structure: One calendar per staff member
+
+  Event fields:
+    summary:     "[Service] — [Client Name]"
+                 e.g., "Adult Haircut — Kwame Mensah"
+    description: |
+      Client: Kwame Mensah
+      Phone: 0241234567
+      Email: kwame@email.com
+      Service: Adult Haircut
+      Duration: 45 minutes
+      Booking ID: bk_a1b2c3d4
+      Payment Ref: PSK_XXXXXX
+      Notes: Fade with beard trim
+    start:       { dateTime: ISO 8601, timeZone: "Africa/Accra" }
+    end:         { dateTime: start + duration, timeZone: "Africa/Accra" }
+    colorId:     "5"  (banana yellow — premium feel)
+    reminders: { useDefault: false, overrides: [] }  // handled by system
+
+3.7 TYPESCRIPT TYPES (shared types file)
+──────────────────────────────────────────
+  // types/index.ts
+
+  export type ServiceId =
+    | "adult_haircut"
+    | "kids_barbering"
+    | "braiding"
+    | "nail_grooming"
+    | "nail_trimming"
+    | "general_grooming"
+    | "massage_spa";
+
+  export type BookingStatus =
+    | "pending"
+    | "confirmed"
+    | "cancelled"
+    | "completed";
+
+  export type PaymentStatus =
+    | "pending"
+    | "paid"
+    | "failed"
+    | "duplicate";
+
+  export type ReminderMethod = "email" | "whatsapp";
+
+  export interface Service {
+    id: ServiceId;
+    name: string;
+    price: number;
+    duration: number;
+    active: boolean;
+    comingSoon: boolean;
+    description: string;
+  }
+
+  export interface Staff {
+    id: string;
+    name: string;
+    role: string;
+    specialities: string[];
+    calendarId: string;
+    whatsappNumber: string;
+  }
+
+  export interface Booking {
+    bookingId: string;
+    timestamp: string;
+    clientName: string;
+    clientPhone: string;
+    clientEmail: string;
+    service: string;
+    serviceId: ServiceId;
+    date: string;
+    time: string;
+    staffId: string;
+    staffName: string;
+    duration: number;
+    fullAmount: number;
+    depositAmount: number;
+    paymentStatus: PaymentStatus;
+    transactionRef?: string;
+    paystackVerified: boolean;
+    reminderMethod: ReminderMethod;
+    reminderSent1hr: boolean;
+    reminderSent30m: boolean;
+    notes?: string;
+    status: BookingStatus;
+    cancelReason?: string;
+    updatedAt: string;
+  }
+
+  export interface TimeSlot {
+    time: string;
+    available: boolean;
+    staffId: string;
+    staffName: string;
+  }
+
+  export interface AvailabilityResponse {
+    date: string;
+    slots: TimeSlot[];
+    fullyBooked: boolean;
+    nextAvailable: string | null;
+  }
+
+  export interface PaystackVerifyResponse {
+    verified: boolean;
+    bookingId?: string;
+    booking?: Booking;
+    reason?: "PAYMENT_FAILED" | "DUPLICATE_REF" | "AMOUNT_MISMATCH";
+  }
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — EXTERNAL SERVICE INTEGRATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1 PAYSTACK INTEGRATION
+──────────────────────────
+  Mode: Live (Ghana, GHS)
+  API Base: https://api.paystack.co
+  Auth: Bearer token in Authorization header (server-side only, never exposed to client)
+  Secret key: PAYSTACK_SECRET_KEY (env variable)
+  Public key: NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY (safe for client if needed)
+
+  Endpoints used:
+    POST /transaction/initialize   → Create payment link
+    GET  /transaction/verify/{ref} → Verify payment
+
+  Amount handling: Paystack uses kobo (pesewas equivalent)
+    GHS amount × 100 = pesewas value to send
+    E.g., GHS 45.00 → 4500 in body
+
+  Callback URL: https://yoursite.com/booking/confirm?ref={reference}
+  Webhook URL (optional): https://yoursite.com/api/payment/webhook
+
+4.2 GOOGLE APIS INTEGRATION
+─────────────────────────────
+  Auth: Google Service Account
+  Scopes required:
+    - https://www.googleapis.com/auth/calendar
+    - https://www.googleapis.com/auth/documents
+    - https://www.googleapis.com/auth/drive.readonly
+
+  Credentials: GOOGLE_SERVICE_ACCOUNT_JSON (env variable, JSON string)
+  Library: googleapis npm package
+
+  Google Docs read pattern:
+    1. Get document by DOCUMENT_ID
+    2. Parse body content (paragraphs/tables)
+    3. Extract structured data from table rows
+
+  Google Docs write pattern:
+    1. Use batchUpdate API
+    2. Insert table row at end of booking table
+    3. Use insertText or replaceAllText operations
+
+  Google Calendar read pattern:
+    1. events.list() with timeMin and timeMax for the target day
+    2. Africa/Accra timezone always
+    3. Loop through events to build blocked time blocks per staff
+
+  Google Calendar write pattern:
+    1. events.insert() on staff-specific calendar
+    2. Set start/end in Africa/Accra timezone
+    3. Populate description with structured client data
+
+4.3 VAPI INTEGRATION
+──────────────────────
+  Platform: Vapi.ai (voice AI)
+  Jude assistant configured in Vapi dashboard
+  Webhook target: /api/jude/webhook (POST)
+  SDK: @vapi-ai/web (frontend widget)
+
+  Server-side:
+    - Validate inbound Vapi requests (VAPI_WEBHOOK_SECRET header check)
+    - Handle function_call events by routing to internal API functions
+    - Return results in Vapi expected format: { result: string }
+
+  Environment variables:
+    VAPI_API_KEY           → For programmatic assistant management
+    VAPI_ASSISTANT_ID      → Jude's assistant ID
+    VAPI_WEBHOOK_SECRET    → For webhook signature validation
+
+4.4 EMAIL (RESEND)
+────────────────────
+  Provider: Resend (resend.com)
+  SDK: resend npm package
+  From: noreply@groomstudio.com (or verified domain)
+  Auth: RESEND_API_KEY (env variable)
+
+  Resend usage:
+    import { Resend } from 'resend';
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({ from, to, subject, html });
+
+  Templates: Inline HTML (React Email templates recommended)
+
+4.5 WHATSAPP (TWILIO)
+────────────────────────
+  Provider: Twilio WhatsApp Sandbox or Business API
+  Auth: TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN
+  From: TWILIO_WHATSAPP_FROM (e.g., "whatsapp:+14155238886")
+
+  Usage:
+    const client = twilio(ACCOUNT_SID, AUTH_TOKEN);
+    await client.messages.create({
+      from: 'whatsapp:+14155238886',
+      to: 'whatsapp:+233XXXXXXXXX',
+      body: messageText
+    });
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — ENVIRONMENT VARIABLES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Paystack
+  PAYSTACK_SECRET_KEY=sk_live_xxxxxxxxxxxxxxxxxxxxxx
+  NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=pk_live_xxxxxx
+
+  # Google
+  GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+  GOOGLE_BOOKING_DOC_ID=1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  GOOGLE_WAITLIST_DOC_ID=1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  GOOGLE_COMPLAINTS_DOC_ID=1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  GOOGLE_REFS_DOC_ID=1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  GOOGLE_CONFIG_DOC_ID=1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+  # Vapi
+  VAPI_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  VAPI_ASSISTANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  VAPI_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxx
+
+  # Email
+  RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxx
+  EMAIL_FROM=noreply@groomstudio.com
+
+  # WhatsApp (Twilio)
+  TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+  STAFF_WHATSAPP_NUMBER=whatsapp:+233XXXXXXXXX
+  ADMIN_WHATSAPP_NUMBER=whatsapp:+233XXXXXXXXX
+
+  # Admin
+  ADMIN_SECRET_TOKEN=a_very_long_random_secret_string
+  NEXT_PUBLIC_SITE_URL=https://groomstudio.com
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6 — SECURITY & RATE LIMITING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  6.1 Authentication:
+    - Admin routes: Bearer token (ADMIN_SECRET_TOKEN) checked in middleware
+    - Jude webhook: HMAC signature validation using VAPI_WEBHOOK_SECRET
+    - Payment webhook (if used): Paystack HMAC-SHA512 signature check
+    - All secrets: server-side env variables only (never NEXT_PUBLIC_ prefixed)
+
+  6.2 Rate limiting:
+    - /api/booking/initiate: 5 requests per IP per 10 minutes
+    - /api/payment/verify: 10 requests per IP per 5 minutes
+    - /api/notify/*: No client-facing rate limit (internal only)
+    - Implementation: Upstash Redis + @upstash/ratelimit (or edge-level Vercel)
+
+  6.3 Input validation:
+    - All API inputs validated with Zod schemas before processing
+    - Phone numbers: Ghana format regex validation
+    - Email: Standard email validation
+    - Date/time: Must be future dates within next 60 days
+    - Service IDs: Must be in allowed enum
+
+  6.4 Idempotency:
+    - Booking initiation: bookingId as idempotency key
+    - Payment verification: Reference already-used check in Google Docs
+
+  6.5 CORS:
+    - Allow only: groomstudio.com, localhost (dev)
+    - Jude webhook: Allow Vapi IP ranges
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7 — ERROR HANDLING STANDARDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  All API errors return consistent shape:
+  {
+    error: string,        // machine-readable error code (SCREAMING_SNAKE_CASE)
+    message: string,      // human-readable description
+    details?: any         // optional extra info
+  }
+
+  HTTP status code conventions:
+    200 — Success
+    400 — Bad request / validation failure
+    401 — Unauthorized (missing/invalid admin token)
+    403 — Forbidden
+    404 — Resource not found
+    409 — Conflict (slot taken, duplicate reference)
+    422 — Unprocessable entity (business logic failure)
+    429 — Rate limit exceeded
+    500 — Internal server error
+    503 — External service unavailable (Google API, Paystack down)
+
+  Error logging:
+    - All 5xx errors logged to Vercel Log Drain or console.error
+    - Google API failures: retry once with exponential backoff
+    - Paystack failures: return 503 with "Payment service unavailable"
+    - Never expose stack traces to client
+
+================================================================================
+END OF BACKEND PRD
+================================================================================
