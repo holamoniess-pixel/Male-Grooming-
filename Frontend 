@@ -1,0 +1,724 @@
+================================================================================
+  FRONTEND PRD — GROOM PREMIUM BARBERING STUDIO
+  AI-Driven Business Automation System | Spintex Road, Accra, Ghana
+  Version 1.0 | Classification: Builder Reference Document
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — DESIGN SYSTEM & IDENTITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.1 BRAND PERSONALITY
+─────────────────────
+GROOM is a premium, luxury grooming studio. The frontend must communicate:
+  - Exclusivity without arrogance
+  - Warmth with professionalism
+  - Modern African luxury aesthetic
+  - Confidence and precision (like a master barber)
+
+Visual Direction: Dark luxury with gold/amber accents. Think cinematic barbershop
+meets high-end spa. Deep charcoal or near-black backgrounds, warm lighting tones,
+tactile glass-surface cards (glassmorphism), cinematic scroll animations.
+
+NOT allowed: generic purple gradients, stock photo vibes, cheap SaaS blue.
+
+1.2 COLOR SYSTEM
+────────────────
+  --color-bg-primary:       #0D0D0D      (near-black, main background)
+  --color-bg-secondary:     #141414      (slightly lighter panels)
+  --color-bg-card:          #1A1A1A      (card surfaces)
+  --color-bg-glass:         rgba(255,255,255,0.04)  (glassmorphism surface)
+  --color-border-glass:     rgba(255,255,255,0.08)  (glassmorphism border)
+
+  --color-gold-primary:     #C9A84C      (primary accent — warm gold)
+  --color-gold-light:       #E2C06B      (hover/active state)
+  --color-gold-dim:         rgba(201,168,76,0.15)  (subtle bg tint)
+
+  --color-text-primary:     #F5F0E8      (warm white — main body text)
+  --color-text-secondary:   #A09080      (muted warm gray)
+  --color-text-accent:      #C9A84C      (gold text for headings/highlights)
+
+  --color-success:          #4CAF7D
+  --color-error:            #E05C5C
+  --color-warning:          #E8A84C
+
+  --color-jude-pulse:       #C9A84C      (Jude AI orb active color)
+
+1.3 TYPOGRAPHY
+──────────────
+  Display / Hero Headings:
+    Font: "Cormorant Garamond" (Google Fonts) — weight 300, 400, 600
+    Use for: Page titles, section headers, hero text
+    Tone: Editorial, luxury, refined
+
+  UI / Body / Labels:
+    Font: "DM Sans" (Google Fonts) — weight 300, 400, 500
+    Use for: Paragraphs, buttons, nav, forms, metadata
+    Tone: Clean, modern, approachable
+
+  Monospace / Code / References:
+    Font: "JetBrains Mono" (Google Fonts) — weight 400
+    Use for: Transaction reference fields, time displays, confirmation codes
+
+  Scale:
+    --text-hero:    clamp(3rem, 8vw, 7rem)      (hero section)
+    --text-h1:      clamp(2rem, 5vw, 3.5rem)
+    --text-h2:      clamp(1.5rem, 3vw, 2.25rem)
+    --text-h3:      1.25rem
+    --text-body:    1rem
+    --text-small:   0.875rem
+    --text-xs:      0.75rem
+
+1.4 SPACING & LAYOUT
+────────────────────
+  Base unit: 8px
+  Spacing scale: 4, 8, 12, 16, 24, 32, 48, 64, 96, 128px
+
+  Max content width:  1280px
+  Gutter (desktop):  80px sides
+  Gutter (tablet):   40px sides
+  Gutter (mobile):   20px sides
+
+  Grid system: 12-column CSS Grid
+  Section padding: 96px top/bottom (desktop), 64px (tablet), 48px (mobile)
+
+1.5 ANIMATION & MOTION SYSTEM
+──────────────────────────────
+  Philosophy: Cinematic, intentional, never gratuitous.
+
+  Easing curves:
+    --ease-luxury:    cubic-bezier(0.25, 0.46, 0.45, 0.94)
+    --ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1)
+    --ease-out-expo:  cubic-bezier(0.19, 1, 0.22, 1)
+
+  Standard durations:
+    --dur-fast:       150ms   (micro-interactions, hover states)
+    --dur-normal:     300ms   (page transitions, modal open)
+    --dur-slow:       600ms   (section reveals, hero animations)
+    --dur-cinematic:  1200ms  (page load sequences)
+
+  Required animations:
+    - Hero text: staggered word-by-word reveal with blur-in (filter: blur → 0)
+    - Section entry: translateY(40px) → 0 + opacity 0 → 1, triggered by IntersectionObserver
+    - Cards: subtle 3D tilt on hover (rotateX/Y via mouse position tracking)
+    - Jude orb: continuous slow pulse + ripple rings when active/speaking
+    - Button press: slight scale-down (0.97) with gold shadow bloom
+    - Page load: full-screen curtain wipe (vertical slide-up reveal)
+    - Scroll progress: thin gold line at top of viewport
+
+1.6 GLASSMORPHISM COMPONENT SPEC
+──────────────────────────────────
+  Standard glass card:
+    background: rgba(255,255,255,0.04)
+    backdrop-filter: blur(24px) saturate(120%)
+    border: 1px solid rgba(255,255,255,0.08)
+    border-radius: 16px
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)
+
+  Elevated glass (modals, active states):
+    background: rgba(255,255,255,0.07)
+    backdrop-filter: blur(40px)
+    border: 1px solid rgba(201,168,76,0.2)
+    box-shadow: 0 16px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,168,76,0.1)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — NAVIGATION SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2.1 TOP NAVIGATION BAR
+───────────────────────
+  Position: Fixed, top: 0, full-width, z-index: 1000
+  Height: 72px (desktop), 64px (mobile)
+  Background: Transparent on hero; transitions to glass on scroll
+  Scroll threshold: 80px triggers background change
+
+  Left section:
+    - GROOM wordmark (custom lettermark treatment, gold color)
+    - Subtitle: "Studio" in small caps, --color-text-secondary
+
+  Center section (desktop only):
+    - Nav links: Services | About | Gallery | Contact
+    - Font: DM Sans, 500 weight, 0.9rem
+    - Color: --color-text-secondary on default
+    - Hover: --color-text-primary with gold underline slide-in (left to right)
+    - Active page: --color-gold-primary
+
+  Right section:
+    - "Book Now" CTA button (primary gold button — see button spec)
+    - "Talk to Jude" ghost button with pulsing mic icon
+    - Mobile: Hamburger menu icon (three lines → X transform on open)
+
+  Mobile nav drawer:
+    - Slides in from right
+    - Glass background, full height
+    - Stack: wordmark, nav links (large), Book Now, Talk to Jude, social icons
+    - Backdrop: semi-transparent dark overlay
+
+2.2 FOOTER
+──────────────
+  Layout: 4-column grid (desktop), 2-column (tablet), stacked (mobile)
+
+  Column 1: GROOM wordmark + tagline + address (Spintex Road, Accra)
+  Column 2: Services quick list (6 items)
+  Column 3: Contact links (WhatsApp, email, phone)
+  Column 4: Social icons + "Powered by Jude AI" badge
+
+  Bottom bar: Copyright | Privacy Policy | Terms
+  Font: DM Sans 400, --text-xs, --color-text-secondary
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — PAGE INVENTORY & LAYOUT SPECS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+────────────────────────────
+PAGE 1: HOME (index / root)
+────────────────────────────
+
+SECTION 1.1 — HERO
+  Layout: Full viewport height (100svh)
+  Background: Dark (#0D0D0D) with subtle animated grain overlay
+             + slow diagonal light sweep (pseudo-element)
+  Content (centered):
+    - Pre-headline tag: Small caps label "Premium Grooming Studio · Accra, Ghana"
+      [font: DM Sans 400, gold color, letter-spacing 0.15em]
+    - Main headline: "Where Precision Meets Luxury"
+      [font: Cormorant Garamond 300, hero size, warm white, staggered word reveal]
+    - Sub-headline: One sentence brand promise
+      [font: DM Sans 300, 1.1rem, --color-text-secondary]
+    - CTA row: [Book Appointment] [Talk to Jude →]
+  Bottom: Scroll indicator (thin gold vertical line + "Scroll" text, animated bounce)
+  Right side (desktop): Jude AI orb floating (see Jude widget spec)
+
+SECTION 1.2 — ABOUT STRIP
+  Layout: 2-column (text left, visual right)
+  Left: Short brand intro paragraph + "Our Story" text link
+  Right: Stats grid (2x2): Years Open | Clients Served | Services | Staff
+         Each stat: large number (Cormorant Garamond) + label (DM Sans)
+
+SECTION 1.3 — SERVICES PREVIEW
+  Layout: Horizontal scroll on mobile, 3-column grid on desktop
+  6 service cards (see card spec in Section 4)
+  Below grid: "View All Services →" ghost link
+
+SECTION 1.4 — HOW IT WORKS
+  Layout: Numbered step flow (4 steps), horizontal on desktop, vertical mobile
+  Steps:
+    1. Talk to Jude (voice/chat)
+    2. Choose your service
+    3. Pay 30% deposit
+    4. Show up & be pampered
+  Each step: icon + number badge + title + short description
+  Connectors: dashed gold line between steps (desktop)
+
+SECTION 1.5 — TESTIMONIALS / SOCIAL PROOF
+  Layout: Centered 3-card carousel (Embla or Swiper compatible)
+  Each card: Stars (5) + quote + client name + service received
+  Auto-plays, 4s interval, pause on hover
+  Dots indicator below
+
+SECTION 1.6 — JUDE AI HIGHLIGHT
+  Layout: Full-width dark section with centered content
+  Background: Subtle radial gradient from gold-dim center
+  Content:
+    - Large Jude orb (animated)
+    - Headline: "Meet Jude, Your AI Receptionist"
+    - Body: 2-3 sentences about Jude's capabilities
+    - Buttons: [Call Jude] [Chat with Jude]
+
+SECTION 1.7 — GALLERY STRIP
+  Layout: Masonry-style or asymmetric grid, 6–8 images
+  Hover: Slight scale + overlay with service label
+  Below: "Follow us on Instagram" link
+
+SECTION 1.8 — BOOKING CTA BANNER
+  Full-width banner, gold accent background-tint
+  Headline: "Ready for a Fresh Cut?"
+  Sub: "Book in 60 seconds. Jude handles the rest."
+  Button: [Book Now]
+
+────────────────────────────
+PAGE 2: SERVICES
+────────────────────────────
+
+  Layout: Hero banner (minimal, text only) → Services grid
+
+  Filters bar (sticky below nav):
+    Pills: All | Hair | Nails | Braiding | Grooming | [Coming Soon]
+    Active pill: gold background, white text
+    Inactive: glass background, muted text
+    Filtering is client-side, no page reload
+
+  Service Cards Grid: 3 columns (desktop), 2 (tablet), 1 (mobile)
+  Each card includes:
+    - Service icon (custom SVG or Lucide icon, gold color)
+    - Service name (Cormorant Garamond h3)
+    - Short description (DM Sans, 2–3 lines)
+    - Duration badge (e.g., "~45 min") — top-right corner chip
+    - Price: "From GHS [amount]"
+    - "Book This" button (outline gold → solid on hover)
+    - "Coming Soon" overlay if not launched (massage/spa)
+
+  Services list:
+    1. Adult Haircut
+    2. Kids' Barbering
+    3. Braiding
+    4. Nail Grooming
+    5. Nail Trimming
+    6. General Grooming
+    7. Massage / Spa [COMING SOON badge]
+
+────────────────────────────
+PAGE 3: BOOKING FLOW
+────────────────────────────
+
+  This is the primary transactional page. Multi-step form flow.
+  Layout: Centered single-column, max-width 640px
+  Step indicator: Top progress bar (4 steps, gold fill)
+
+  STEP 1 — SELECT SERVICE
+    - Filterable service list (radio-select cards)
+    - Each card: icon + name + duration + price
+    - Selected state: gold border + checkmark badge
+    - "Next: Choose Time →" button
+
+  STEP 2 — SELECT DATE & TIME
+    - Custom calendar component:
+        Dark glass style
+        Disabled dates (fully booked shown in muted, crossed)
+        Available dates clickable
+        Today highlighted
+    - Time slots grid (e.g., 9:00, 9:30, 10:00 …) — dynamically loaded
+    - Booked slots: muted, disabled, strikethrough
+    - Available slots: gold outline, selectable
+    - Selected slot: solid gold fill
+    - System enforces 1-hour walk-in buffer (unavailable in final slot)
+    - If no slots: "This day is fully booked. Next available: [date]" + option to join waitlist
+
+  STEP 3 — PERSONAL DETAILS
+    Fields:
+      - Full Name [text input]
+      - Phone Number [tel input, Ghana format hint: 024XXXXXXX]
+      - Email Address [email input]
+      - Preferred Reminder Method [radio: Email | WhatsApp]
+      - Special Requests / Notes [textarea, optional]
+    All inputs: glass-style dark input field
+      border: 1px solid rgba(255,255,255,0.1)
+      focus: border-color gold + subtle gold glow
+      placeholder: muted gold
+
+  STEP 4 — PAYMENT
+    Summary card:
+      - Selected service
+      - Date & Time
+      - Assigned staff (auto-assigned, displayed)
+      - Full price + 30% deposit amount in GHS
+    Payment instruction:
+      - Text: "Jude will send a payment link to [email]. Complete payment to confirm."
+      - Or: CTA button "Request Payment Link" → triggers Paystack link generation
+    Reference input:
+      - "Enter transaction reference after payment"
+      - [text input, monospace font, UPPERCASE auto-transform]
+    Verify button: [Verify & Confirm Booking]
+    Verification states:
+      - Loading spinner (gold animated)
+      - Success: Green checkmark + confirmation card
+      - Duplicate: Warning message "Reference already used"
+      - Failed: Error message + retry option
+
+  CONFIRMATION SCREEN:
+    Full-screen success state
+    Elements:
+      - Animated gold checkmark
+      - "You're Booked!" headline
+      - Booking summary card (name, service, date, time, barber)
+      - Reminder info (method selected)
+      - "Add to Google Calendar" button
+      - "Share Booking" button
+      - "Back to Home" ghost link
+
+────────────────────────────
+PAGE 4: ABOUT
+────────────────────────────
+
+  Hero: Brand story, mission, team introduction
+  Team section: Staff cards (4–5 members)
+    Each card: Photo (circle crop) + Name + Title/Speciality + short bio
+  Values section: 3–4 brand values with icons
+  Location section: Embedded map (Google Maps iframe) + address + hours
+
+────────────────────────────
+PAGE 5: GALLERY
+────────────────────────────
+
+  Masonry or asymmetric grid layout
+  Lightbox on click (full-screen image with navigation arrows)
+  Optional Instagram feed integration (if API available)
+  Filter tabs: All | Haircuts | Braids | Nails | Studio
+
+────────────────────────────
+PAGE 6: CONTACT
+────────────────────────────
+
+  2-column layout:
+  Left: Contact form (Name, Email, Phone, Message) + Submit
+  Right: Contact info (WhatsApp link, email, address, hours)
+        Embedded map
+
+────────────────────────────
+PAGE 7: ADMIN DASHBOARD
+────────────────────────────
+
+  Access: Protected route (/admin), password or auth-gated
+  Design: Slightly lighter dark theme, still glassmorphism
+
+  Sidebar nav (desktop) or top tabs (mobile):
+    - Overview
+    - Bookings
+    - Payments
+    - Waitlist
+    - Complaints
+    - Settings
+
+  OVERVIEW TAB:
+    KPI cards: Today's Bookings | Revenue Today | Pending Payments | Open Complaints
+    Recent activity feed (last 10 events)
+    Quick actions: Add Manual Booking | Send Announcement
+
+  BOOKINGS TAB:
+    Table: Client | Service | Date/Time | Staff | Payment Status | Actions
+    Filters: Date range, staff, service, status
+    Actions: View details | Cancel | Reschedule
+
+  PAYMENTS TAB:
+    Table: Reference | Client | Amount | Status | Date | Verify button
+    Status badges: Verified (green) | Pending (amber) | Duplicate (red)
+
+  WAITLIST TAB:
+    Table: Name | Email | Requested date | Service | Notify button
+
+  COMPLAINTS TAB:
+    Table: Client | Date | Summary | Status | Escalate button
+
+  SETTINGS TAB:
+    - Pricing editor: Per service price with inline edit
+    - Working hours editor: Per day start/end time
+    - Staff management: Add/remove/edit staff names and specialities
+    - WhatsApp number update (staff, admin)
+    - Toggle: Booking paused / active
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — COMPONENT LIBRARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+4.1 BUTTONS
+────────────
+
+  PRIMARY (Gold Solid):
+    bg: --color-gold-primary
+    text: #0D0D0D (dark, for contrast)
+    font: DM Sans 500, 0.9rem, letter-spacing 0.05em
+    padding: 14px 28px
+    border-radius: 8px
+    hover: bg darken, scale(1.02), box-shadow gold glow
+    active: scale(0.97)
+    disabled: opacity 0.4, cursor not-allowed
+    icon support: left or right icon with 8px gap
+
+  SECONDARY (Ghost Gold):
+    bg: transparent
+    border: 1px solid --color-gold-primary
+    text: --color-gold-primary
+    hover: bg --color-gold-dim, text gold-light
+    same padding/radius as primary
+
+  TERTIARY (Text Link):
+    No border, no bg
+    text: --color-text-secondary
+    hover: text --color-text-primary, underline slide-in
+    Icon arrow optional
+
+  ICON BUTTON:
+    Square: 44px × 44px
+    Glass bg, gold icon
+    Tooltip on hover (DM Sans, small)
+
+  DANGER:
+    bg: transparent → red bg on hover
+    border: --color-error
+    text: --color-error
+
+4.2 INPUT FIELDS
+─────────────────
+  Container:
+    display: flex, flex-direction: column, gap: 6px
+
+  Label:
+    DM Sans 400, 0.85rem, --color-text-secondary
+    Required mark: gold asterisk
+
+  Input:
+    height: 48px
+    padding: 0 16px
+    bg: rgba(255,255,255,0.04)
+    border: 1px solid rgba(255,255,255,0.1)
+    border-radius: 8px
+    color: --color-text-primary
+    font: DM Sans 400, 1rem
+    focus: border-color --color-gold-primary, box-shadow 0 0 0 3px rgba(201,168,76,0.15)
+    error state: border-color --color-error
+    disabled: opacity 0.5
+
+  Textarea: same styles, min-height 120px, resize: vertical
+
+  Select: same as input, custom arrow icon (gold chevron SVG)
+
+  Helper text: DM Sans 400, 0.78rem, below input
+    Default: --color-text-secondary
+    Error: --color-error
+    Success: --color-success
+
+4.3 CARDS
+──────────
+  Service Card:
+    Glass style (see 1.6)
+    Padding: 24px
+    Header: Icon (40px, gold) + "Coming Soon" badge if applicable
+    Body: Name (h3), description, duration chip
+    Footer: Price + Book button
+    Hover: border-color rgba(201,168,76,0.3), translateY(-4px)
+
+  Stat Card:
+    Compact glass card
+    Large number (Cormorant Garamond, 2.5rem, gold)
+    Label (DM Sans, small, muted)
+    Optional trend arrow (up/down, colored)
+
+  Booking Summary Card:
+    Extended glass card
+    Row layout: label (muted) | value (primary)
+    Divider: 1px solid rgba(255,255,255,0.06)
+
+  Staff Card:
+    Photo top (circle, 80px)
+    Name + role
+    Specialty tags (gold pill badges)
+
+4.4 BADGES & CHIPS
+───────────────────
+  Status badge (pill):
+    Confirmed: green bg tint, green text
+    Pending: amber bg tint, amber text
+    Cancelled: red bg tint, red text
+    Coming Soon: gold bg tint, gold text
+
+  Duration chip:
+    Small pill, glass bg
+    Clock icon + text
+    Font: DM Sans 400, 0.78rem
+
+  Category filter pill:
+    Inactive: glass bg, muted text
+    Active: gold bg, dark text
+    Hover: gold bg dim
+
+4.5 MODALS & OVERLAYS
+──────────────────────
+  Backdrop: rgba(0,0,0,0.7) with backdrop-filter: blur(8px)
+  Modal container:
+    Elevated glass (see 1.6)
+    max-width: 560px, width: 90vw
+    padding: 32px
+    border-radius: 20px
+  Header: Title (h3) + Close button (X icon, 44px tap target)
+  Animation: scale(0.95) opacity(0) → scale(1) opacity(1), 250ms ease-out
+  Scroll lock on body when open
+
+4.6 TOAST NOTIFICATIONS
+─────────────────────────
+  Position: Bottom-right (desktop), bottom-center (mobile)
+  Stack: Up to 3 visible at once
+  Glass style, 340px width
+  Types:
+    Success: green left border + check icon
+    Error: red left border + X icon
+    Info: gold left border + info icon
+  Auto-dismiss: 4 seconds with progress bar
+  Dismiss on click or swipe (mobile)
+
+4.7 LOADING STATES
+───────────────────
+  Full page loader:
+    GROOM wordmark centered
+    Gold spinning ring around it
+    Slow fade-in, fade-out transition
+
+  Component skeleton:
+    Animated shimmer (left→right gradient sweep)
+    Dark gray on slightly lighter dark
+
+  Button loading:
+    Replace text with small spinner
+    Disable clicks
+
+  Inline spinner:
+    24px circular, gold, 1s rotation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — JUDE AI WIDGET SPEC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+5.1 JUDE FLOATING BUTTON (global)
+──────────────────────────────────
+  Position: Fixed, bottom-right, 24px margin
+  Size: 60px × 60px circle
+  Visual: Gold gradient bg + animated mic/wave icon
+  State 1 (idle): Slow pulse animation (scale 1 → 1.08 → 1, 3s loop)
+  State 2 (speaking): Ripple rings radiating outward (3 rings, staggered)
+  State 3 (listening): Inner circle color shift to brighter gold
+  Tooltip: "Talk to Jude" on hover
+
+  Click behavior:
+    Opens Jude widget panel (slide-up from bottom, full-width on mobile)
+
+5.2 JUDE WIDGET PANEL
+───────────────────────
+  Layout:
+    Bottom sheet on mobile (360px height, drag to expand)
+    Side panel on desktop (400px width, slides from right)
+
+  Header:
+    Jude avatar (orb, animated) + "Jude" name + "AI Receptionist" subtitle
+    Close button (X)
+
+  Tabs:
+    [🎙 Voice Call] [💬 Chat]
+
+  Voice tab:
+    Large Jude orb (120px, animated)
+    Status text: "Tap to start a conversation"
+    Call button (gold, 72px circle)
+    Active: waveform visualization
+    Powered by Vapi (embedded widget)
+
+  Chat tab:
+    Message history (scrollable)
+    User messages: right-aligned, gold bg pill
+    Jude messages: left-aligned, glass pill, Jude avatar dot
+    Input: text field + send button
+    Quick reply chips (suggested responses)
+
+  Footer:
+    "Jude can book, answer, and help." — small muted text
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6 — ICONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Icon library: Lucide Icons (lucide.dev) — consistent style, SVG
+  Size standard: 20px (inline), 24px (standalone), 40px (feature icons)
+  Color: Default --color-gold-primary; muted --color-text-secondary
+
+  Required icons by context:
+
+  Navigation:
+    Menu (hamburger): menu / x
+    Home: home
+    Services: scissors
+    Booking: calendar
+    About: users
+    Gallery: image
+    Contact: mail
+
+  Services:
+    Haircut: scissors
+    Kids: baby
+    Braiding: git-branch (stylized)
+    Nail grooming: sparkles
+    Nail trimming: crop
+    Grooming: wand
+    Spa/Massage: heart-pulse [coming soon]
+
+  Booking flow:
+    Calendar: calendar
+    Time: clock
+    User: user
+    Phone: phone
+    Email: mail
+    Payment: credit-card
+    Verify: shield-check
+    Success: circle-check
+    Staff: user-check
+
+  Status:
+    Confirmed: circle-check (green)
+    Pending: clock (amber)
+    Error: circle-x (red)
+    Info: info (gold)
+    Warning: alert-triangle (amber)
+
+  Jude widget:
+    Voice: mic / mic-off
+    Chat: message-circle
+    Wave: radio (animated)
+
+  Admin:
+    Dashboard: layout-dashboard
+    Bookings: calendar-check
+    Payments: banknote
+    Waitlist: list-ordered
+    Complaints: message-square-warning
+    Settings: settings-2
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7 — RESPONSIVE & ACCESSIBILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Breakpoints:
+    Mobile:   < 640px
+    Tablet:   640px – 1024px
+    Desktop:  > 1024px
+    Wide:     > 1440px
+
+  Responsive rules:
+    - All grids collapse to single column on mobile
+    - Touch targets minimum 44px × 44px
+    - Booking multi-step: full-screen on mobile
+    - Admin dashboard: sidebar → tab bar on mobile
+
+  Accessibility (WCAG 2.1 AA):
+    - All interactive elements keyboard navigable (Tab, Enter, Escape)
+    - Focus ring: 2px solid gold outline, 2px offset
+    - aria-labels on all icon-only buttons
+    - Form fields linked to labels via htmlFor/id
+    - Color contrast ratio: minimum 4.5:1 for body text
+    - Screen reader announcements for loading states and errors
+    - Skip to main content link (visually hidden, visible on focus)
+
+  Performance targets:
+    - LCP (Largest Contentful Paint): < 2.5s
+    - CLS (Cumulative Layout Shift): < 0.1
+    - FID / INP: < 200ms
+    - Lazy-load images below fold
+    - Preload hero fonts (Cormorant Garamond, DM Sans)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 8 — TECH STACK (FRONTEND)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Framework:       Next.js 14+ (App Router)
+  Styling:         Tailwind CSS v3 + CSS variables for tokens
+  Animations:      Framer Motion (page transitions, scroll reveals, Jude orb)
+  Icons:           Lucide React
+  Fonts:           Google Fonts (via next/font/google)
+  Calendar UI:     Custom built or react-day-picker (dark-themed)
+  Carousel:        Embla Carousel
+  Form handling:   React Hook Form + Zod validation
+  Toasts:          Sonner or custom implementation
+  State:           Zustand (lightweight global state for booking flow)
+  HTTP client:     Fetch API (no axios dependency)
+  Vapi widget:     @vapi-ai/web SDK embedded
+  Hosting:         Vercel (serverless-compatible)
+
+================================================================================
+END OF FRONTEND PRD
+================================================================================
